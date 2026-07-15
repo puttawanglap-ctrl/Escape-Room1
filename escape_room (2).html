@@ -1,0 +1,1321 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Escape Room : ตามหามาตราตัวสะกด</title>
+    <style>
+        /* =========================================
+           CSS VARIABLES & RESET
+        ========================================= */
+        @import url('https://fonts.googleapis.com/css2?family=Mali:wght@400;600;700&family=Sarabun:wght@400;700&display=swap');
+
+        :root {
+            --primary: #8a2be2;
+            --secondary: #ff1493;
+            --accent: #00ffff;
+            --bg-dark: #0f0c29;
+            --bg-mid: #302b63;
+            --bg-light: #24243e;
+            --text-light: #ffffff;
+            --text-dark: #333333;
+            --glass-bg: rgba(255, 255, 255, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.2);
+            
+            /* Kingdom Colors */
+            --k-kok: #ff6b6b;
+            --k-kod: #4facfe;
+            --k-kob: #43e97b;
+            --k-kong: #f6d365;
+            --k-kon: #a18cd1;
+            --k-kom: #ff9a9e;
+            --k-koey: #00f2fe;
+            --k-keaw: #fa709a;
+            --k-boss: #ff0844;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        body {
+            font-family: 'Mali', 'Sarabun', cursive, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark), var(--bg-mid), var(--bg-light));
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            color: var(--text-light);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* =========================================
+           CORE LAYOUT & CANVAS
+        ========================================= */
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 1024px;
+            height: 100%;
+            max-height: 768px;
+            background: rgba(0, 0, 0, 0.3);
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+            overflow: hidden;
+            /* For desktop, make it look like a screen */
+            border-radius: 0; 
+        }
+
+        @media (min-width: 1025px) {
+            #game-container {
+                border-radius: 20px;
+                height: 90vh;
+                border: 2px solid var(--glass-border);
+            }
+        }
+
+        canvas#magic-particles {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1;
+            pointer-events: none;
+        }
+
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            padding: 20px;
+            opacity: 0;
+            transition: opacity 0.5s ease;
+        }
+
+        .screen.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        /* =========================================
+           UI COMPONENTS (Glassmorphism)
+        ========================================= */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            padding: 20px;
+        }
+
+        h1, h2, h3 {
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-align: center;
+        }
+
+        .title-main {
+            font-size: clamp(2rem, 5vw, 4rem);
+            background: linear-gradient(to right, #f6d365, #fda085);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+        }
+
+        .title-sub {
+            font-size: clamp(1rem, 2vw, 1.5rem);
+            color: var(--accent);
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            border: none;
+            border-radius: 50px;
+            padding: 15px 30px;
+            color: white;
+            font-family: 'Mali', cursive;
+            font-size: 1.2rem;
+            font-weight: bold;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3), inset 0 2px 2px rgba(255,255,255,0.3);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-transform: uppercase;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-3px) scale(1.05);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4), inset 0 2px 2px rgba(255,255,255,0.4);
+            filter: brightness(1.1);
+        }
+
+        .btn:active {
+            transform: translateY(1px) scale(0.95);
+        }
+
+        .btn-green { background: linear-gradient(45deg, #11998e, #38ef7d); }
+        .btn-gold { background: linear-gradient(45deg, #f6d365, #fda085); color: #333; }
+        .btn-icon { padding: 15px; border-radius: 50%; aspect-ratio: 1; }
+
+        /* =========================================
+           SPECIFIC SCREENS
+        ========================================= */
+        /* Splash / Main Menu */
+        #screen-menu {
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .floating-book {
+            font-size: 5rem;
+            animation: floatBook 3s ease-in-out infinite;
+            filter: drop-shadow(0 10px 10px rgba(0,0,0,0.5));
+            margin-bottom: 20px;
+        }
+
+        @keyframes floatBook {
+            0%, 100% { transform: translateY(0) rotate(0deg); }
+            50% { transform: translateY(-20px) rotate(5deg); }
+        }
+
+        .menu-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+            max-width: 300px;
+        }
+
+        /* Map Screen */
+        #screen-map {
+            justify-content: space-between;
+        }
+        
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 20px;
+            margin-bottom: 20px;
+        }
+
+        .stats-group {
+            display: flex;
+            gap: 15px;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .stat-item { display: flex; align-items: center; gap: 5px; }
+
+        .map-container {
+            flex: 1;
+            position: relative;
+            background: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" opacity="0.1"><line x1="10%" y1="90%" x2="90%" y2="10%" stroke="white" stroke-width="2" stroke-dasharray="10,10"/></svg>');
+            background-size: cover;
+            border-radius: 20px;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 10px;
+            padding: 20px;
+        }
+
+        .level-node {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: var(--glass-bg);
+            border: 3px solid rgba(255,255,255,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 2rem;
+            cursor: pointer;
+            position: relative;
+            place-self: center;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .level-node.locked {
+            filter: grayscale(1) brightness(0.5);
+            cursor: not-allowed;
+        }
+        
+        .level-node.unlocked {
+            animation: pulseGlow 2s infinite;
+        }
+
+        .level-node.completed {
+            background: linear-gradient(45deg, gold, yellow);
+            border-color: white;
+        }
+
+        .level-name {
+            position: absolute;
+            bottom: -25px;
+            font-size: 1rem;
+            font-weight: bold;
+            white-space: nowrap;
+            background: rgba(0,0,0,0.6);
+            padding: 2px 8px;
+            border-radius: 10px;
+        }
+
+        @keyframes pulseGlow {
+            0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(255, 255, 255, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+        }
+
+        /* Specific positions for map nodes to make it look like a path */
+        #node-0 { grid-column: 1; grid-row: 3; background: var(--k-kok); }
+        #node-1 { grid-column: 2; grid-row: 3; background: var(--k-kod); }
+        #node-2 { grid-column: 3; grid-row: 3; background: var(--k-kob); }
+        #node-3 { grid-column: 3; grid-row: 2; background: var(--k-kong); }
+        #node-4 { grid-column: 2; grid-row: 2; background: var(--k-kon); }
+        #node-5 { grid-column: 1; grid-row: 2; background: var(--k-kom); }
+        #node-6 { grid-column: 1; grid-row: 1; background: var(--k-koey); }
+        #node-7 { grid-column: 2; grid-row: 1; background: var(--k-keaw); }
+        #node-boss { grid-column: 3; grid-row: 1; background: var(--k-boss); width: 100px; height: 100px; border: 4px solid gold; font-size: 3rem;}
+
+        /* Game Screen */
+        #screen-game {
+            justify-content: flex-start;
+        }
+
+        .game-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        
+        .kingdom-title {
+            font-size: 1.5rem;
+            padding: 5px 20px;
+            border-radius: 20px;
+            background: rgba(0,0,0,0.5);
+        }
+
+        .question-card {
+            background: var(--glass-bg);
+            border: 2px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .question-text {
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .word-highlight {
+            color: #f6d365;
+            font-size: 120%;
+            text-shadow: 0 0 10px rgba(246, 211, 101, 0.8);
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            width: 100%;
+        }
+
+        .option-btn {
+            background: rgba(255,255,255,0.15);
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 15px;
+            padding: 20px;
+            font-size: clamp(1.2rem, 3vw, 1.8rem);
+            color: white;
+            font-family: 'Mali', cursive;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+        }
+
+        .option-btn:hover {
+            background: rgba(255,255,255,0.3);
+            transform: scale(1.02);
+        }
+
+        .option-btn.correct { background: rgba(67, 233, 123, 0.8); border-color: white; }
+        .option-btn.wrong { background: rgba(255, 107, 107, 0.8); border-color: white; }
+        .option-btn.disabled { opacity: 0.5; cursor: not-allowed; transform: scale(1); }
+
+        .powerup-bar {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: auto;
+        }
+
+        .powerup-btn {
+            background: rgba(0,0,0,0.5);
+            border: 1px solid var(--glass-border);
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            font-size: 1.5rem;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            position: relative;
+        }
+        
+        .powerup-btn:hover { background: rgba(255,255,255,0.2); transform: translateY(-5px); }
+        .powerup-btn.used { filter: grayscale(1); opacity: 0.5; pointer-events: none; }
+        .powerup-count {
+            position: absolute;
+            top: -5px;
+            right: -5px;
+            background: #ff1493;
+            color: white;
+            font-size: 0.8rem;
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        /* Result Screen */
+        .certificate {
+            background: #fff;
+            color: #333;
+            padding: 40px;
+            border-radius: 10px;
+            border: 10px solid #f6d365;
+            text-align: center;
+            position: relative;
+            margin-bottom: 20px;
+        }
+        .cert-title { font-family: 'Sarabun', sans-serif; font-size: 2rem; color: #b8860b; margin-bottom: 10px;}
+        .cert-name { font-size: 2.5rem; color: var(--primary); margin: 20px 0; border-bottom: 2px dashed #ccc; display: inline-block; padding: 0 20px;}
+        .seal {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background: red;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 0.8rem;
+            border: 4px dashed darkred;
+            transform: rotate(-15deg);
+        }
+
+        /* Teacher Mode */
+        .settings-group { margin-bottom: 20px; text-align: left;}
+        .settings-group label { display: block; margin-bottom: 5px; font-size: 1.2rem;}
+        .settings-group input[type="range"] { width: 100%; accent-color: var(--primary); }
+        
+        /* Modals & Overlays */
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+        .modal-overlay.active { display: flex; }
+        .modal-content {
+            background: var(--bg-mid);
+            border: 2px solid var(--accent);
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 400px;
+            width: 90%;
+            animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes popIn { 0% { transform: scale(0.5); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
+
+        /* Helpers */
+        .hidden { display: none !important; }
+        .text-center { text-align: center; }
+        .mt-4 { margin-top: 1rem; }
+        .mb-4 { margin-bottom: 1rem; }
+        .flex-center { display: flex; justify-content: center; align-items: center; gap: 10px; }
+
+        /* Animations for feedback */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-10px); }
+            75% { transform: translateX(10px); }
+        }
+        .shake { animation: shake 0.4s ease-in-out; }
+        
+        @keyframes floatUpFade {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-100px) scale(1.5); opacity: 0; }
+        }
+        .feedback-text {
+            position: absolute;
+            font-size: 3rem;
+            font-weight: bold;
+            pointer-events: none;
+            z-index: 50;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+        .feedback-correct { color: #43e97b; animation: floatUpFade 1s forwards; }
+        .feedback-wrong { color: #ff6b6b; animation: floatUpFade 1s forwards; }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <!-- Background Canvas for Particles/Magic -->
+    <canvas id="magic-particles"></canvas>
+
+    <!-- 1. Main Menu Screen -->
+    <div id="screen-menu" class="screen active">
+        <div class="floating-book">📖</div>
+        <h1 class="title-main">Escape Room</h1>
+        <h2 class="title-sub">ตามหามาตราตัวสะกดทั้ง 8 อาณาจักร</h2>
+        
+        <div class="menu-buttons">
+            <button class="btn btn-green" onclick="startGame()">▶ เริ่มผจญภัย</button>
+            <button class="btn" onclick="showScreen('screen-teacher')">⚙️ โหมดครูผู้สอน</button>
+            <button class="btn btn-gold" onclick="showScreen('screen-leaderboard')">🏆 หอเกียรติยศ</button>
+        </div>
+    </div>
+
+    <!-- 2. Teacher Settings Screen -->
+    <div id="screen-teacher" class="screen glass-panel" style="margin: 20px; height: auto; align-self: center;">
+        <h1 class="title-main" style="font-size: 2rem;">ตั้งค่าเกม (ครูผู้สอน)</h1>
+        
+        <div class="settings-group">
+            <label>จำนวนชีวิต (Hearts): <span id="val-lives">3</span></label>
+            <input type="range" id="set-lives" min="1" max="10" value="3" oninput="document.getElementById('val-lives').innerText=this.value">
+        </div>
+        <div class="settings-group">
+            <label>จำนวนคำถามต่อด่าน: <span id="val-q-count">5</span></label>
+            <input type="range" id="set-q-count" min="3" max="10" value="5" oninput="document.getElementById('val-q-count').innerText=this.value">
+        </div>
+        
+        <div class="flex-center mt-4">
+            <button class="btn btn-green" onclick="saveSettings()">บันทึก</button>
+            <button class="btn" onclick="showScreen('screen-menu')">กลับ</button>
+        </div>
+    </div>
+
+    <!-- 3. Map / Kingdom Select Screen -->
+    <div id="screen-map" class="screen">
+        <div class="top-bar">
+            <div class="stats-group">
+                <div class="stat-item">❤️ <span id="hud-lives">3</span></div>
+                <div class="stat-item">⭐ <span id="hud-score">0</span></div>
+                <div class="stat-item">📜 <span id="hud-scrolls">0</span>/8</div>
+            </div>
+            <button class="btn btn-icon" onclick="showScreen('screen-menu')" style="padding: 10px; font-size: 1rem;">🏠</button>
+        </div>
+        
+        <h2 style="margin-bottom: 10px;">แผนที่อาณาจักรเวทมนตร์</h2>
+        <div class="map-container" id="map-nodes-container">
+            <!-- Nodes generated by JS -->
+        </div>
+    </div>
+
+    <!-- 4. Game / Level Screen -->
+    <div id="screen-game" class="screen">
+        <div class="game-header">
+            <div class="stats-group" style="background: rgba(0,0,0,0.4); padding: 5px 15px; border-radius: 20px;">
+                <div class="stat-item">❤️ <span id="game-lives">3</span></div>
+                <div class="stat-item">⭐ <span id="game-score">0</span></div>
+            </div>
+            <div class="kingdom-title" id="current-kingdom-title">อาณาจักร แม่ กก</div>
+            <div style="font-weight: bold; background: rgba(0,0,0,0.4); padding: 5px 15px; border-radius: 20px;">
+                คำถาม: <span id="game-q-current">1</span>/<span id="game-q-total">5</span>
+            </div>
+        </div>
+
+        <div class="question-card" id="question-area">
+            <!-- Question content injected here -->
+            <div class="question-text" id="q-text">กำลังโหลดเวทมนตร์...</div>
+            <div class="options-grid" id="q-options">
+                <!-- Options injected here -->
+            </div>
+        </div>
+
+        <div class="powerup-bar">
+            <button class="powerup-btn" id="btn-hint" onclick="usePowerup('hint')">
+                💡<span class="powerup-count" id="count-hint">3</span>
+            </button>
+            <button class="powerup-btn" id="btn-shield" onclick="usePowerup('shield')">
+                🛡️<span class="powerup-count" id="count-shield">1</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 5. Result Screen -->
+    <div id="screen-result" class="screen" style="align-items: center; justify-content: center; overflow-y: auto;">
+        <div class="certificate">
+            <div class="cert-title">ประกาศนียบัตรผู้พิทักษ์ภาษาไทย</div>
+            <div style="font-size: 1.2rem; margin-top: 20px;">ขอมอบให้แก่</div>
+            <div class="cert-name" id="cert-player-name">ผู้เล่นคนเก่ง</div>
+            <div style="font-size: 1.2rem;">เพื่อแสดงว่าได้พิชิตอาณาจักรมาตราตัวสะกดสำเร็จ</div>
+            
+            <div style="margin-top: 30px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; text-align: left; background: rgba(0,0,0,0.05); padding: 20px; border-radius: 10px;">
+                <div>คะแนนรวม: <strong id="res-score">0</strong> ⭐</div>
+                <div>คัมภีร์ที่เก็บได้: <strong id="res-scrolls">0</strong> 📜</div>
+                <div>ความแม่นยำ: <strong id="res-accuracy">0</strong>% 🎯</div>
+                <div>ระดับความสำเร็จ: <strong id="res-rank" style="color: var(--primary);">ทองแดง</strong></div>
+            </div>
+            
+            <div class="seal">รับรอง<br>เวทมนตร์</div>
+        </div>
+        
+        <div class="flex-center">
+            <button class="btn btn-green" onclick="initGameData(); showScreen('screen-map')">เล่นอีกครั้ง</button>
+            <button class="btn btn-gold" onclick="saveToLeaderboard()">บันทึกสถิติ</button>
+        </div>
+    </div>
+
+    <!-- 6. Leaderboard Screen -->
+    <div id="screen-leaderboard" class="screen glass-panel" style="margin: 20px; height: auto; align-self: center;">
+        <h1 class="title-main" style="font-size: 2rem;">🏆 หอเกียรติยศ</h1>
+        <div id="leaderboard-list" style="margin: 20px 0; max-height: 300px; overflow-y: auto; text-align: left; background: rgba(0,0,0,0.2); padding: 10px; border-radius: 10px;">
+            <!-- Generated by JS -->
+        </div>
+        <button class="btn" onclick="showScreen('screen-menu')">กลับหน้าหลัก</button>
+    </div>
+
+</div>
+
+<!-- Universal Modal -->
+<div class="modal-overlay" id="custom-modal">
+    <div class="modal-content">
+        <h2 id="modal-title" style="margin-bottom: 15px;">ข้อความ</h2>
+        <p id="modal-message" style="margin-bottom: 25px; font-size: 1.2rem;"></p>
+        <button class="btn" id="modal-btn" onclick="closeModal()">ตกลง</button>
+    </div>
+</div>
+
+<script>
+/**
+ * ============================================================================
+ * GAME DATA & CONFIGURATION
+ * ============================================================================
+ */
+const GAME_CONFIG = {
+    defaultLives: 3,
+    questionsPerLevel: 5,
+    bossQuestions: 15,
+    powerups: { hint: 3, shield: 1 }
+};
+
+const KINGDOMS = [
+    { id: 'kok', name: 'แม่ กก', icon: '🦅', color: 'var(--k-kok)' },
+    { id: 'kod', name: 'แม่ กด', icon: '🛡️', color: 'var(--k-kod)' },
+    { id: 'kob', name: 'แม่ กบ', icon: '🐸', color: 'var(--k-kob)' },
+    { id: 'kong', name: 'แม่ กง', icon: '🐘', color: 'var(--k-kong)' },
+    { id: 'kon', name: 'แม่ กน', icon: '🏠', color: 'var(--k-kon)' },
+    { id: 'kom', name: 'แม่ กม', icon: '☂️', color: 'var(--k-kom)' },
+    { id: 'koey', name: 'แม่ เกย', icon: '🍌', color: 'var(--k-koey)' },
+    { id: 'keaw', name: 'แม่ เกอว', icon: '🐱', color: 'var(--k-keaw)' },
+    { id: 'boss', name: 'หอสมุดเวทมนตร์ (Boss)', icon: '👑', color: 'var(--k-boss)', isBoss: true }
+];
+
+// Vocabulary Database
+const VOCAB = {
+    'kok': ['นก', 'หมวก', 'สุนัข', 'เมฆ', 'เลข', 'ประมุข', 'ความสุข', 'โชค', 'พรรค', 'วัคซีน', 'บริจาค', 'ประโยค'],
+    'kod': ['มด', 'รถ', 'กระดาษ', 'ตำรวจ', 'ชีวิต', 'กฎหมาย', 'โกรธ', 'ประเทศ', 'พัฒนา', 'ปรากฏ', 'อิฐ', 'ครุฑ', 'พุทธ', 'พิซซ่า'], // พิซซ่า is foreign but often taught, let's stick to standard
+    'kob': ['กบ', 'ธูป', 'รูป', 'ภาพ', 'ยีราฟ', 'โลภ', 'บาป', 'คำสาป', 'ทัพพี', 'กราฟ', 'ไมโครเวฟ'],
+    'kong': ['ลิง', 'กางเกง', 'ช้าง', 'ร้องเพลง', 'แข็งแรง', 'มุ้ง', 'กลอง', 'กระโปรง', 'เตียง'],
+    'kon': ['นาน', 'บ้าน', 'ฟัน', 'ทหาร', 'ผลไม้', 'บอล', 'ของขวัญ', 'พยาบาล', 'วิญญาณ', 'กุญแจ', 'ปลาวาฬ'],
+    'kom': ['ลม', 'ร่ม', 'ผม', 'ยิ้ม', 'ขนม', 'ส้ม', 'เข็ม', 'มะขาม', 'สนาม'],
+    'koey': ['ยาย', 'หอย', 'กล้วย', 'สวย', 'เนย', 'ป่วย', 'ถ้วย', 'ป้าย', 'สร้อย'],
+    'keaw': ['แมว', 'ดาว', 'แก้ว', 'หิว', 'นิ้ว', 'ข้าว', 'มะพร้าว', 'กรรไกร', 'คอมพิวเตอร์'] // Removed some odd ones, keep standard
+};
+// Clean up vocabs
+VOCAB.kod = ['มด', 'รถ', 'กระดาษ', 'ตำรวจ', 'ชีวิต', 'กฎหมาย', 'โกรธ', 'ประเทศ', 'ปรากฏ', 'อิฐ', 'ครุฑ', 'พุทธ', 'อากาศ'];
+VOCAB.keaw = ['แมว', 'ดาว', 'แก้ว', 'หิว', 'นิ้ว', 'ข้าว', 'มะพร้าว', 'ก๋วยเตี๋ยว', 'สีเขียว'];
+VOCAB.kon = ['นาน', 'บ้าน', 'ฟัน', 'ทหาร', 'น้ำตาล', 'บอล', 'ของขวัญ', 'พยาบาล', 'วิญญาณ', 'กุญแจ', 'ปลาวาฬ'];
+
+// Game State
+let state = {
+    lives: GAME_CONFIG.defaultLives,
+    score: 0,
+    scrolls: 0,
+    currentLevelIndex: 0,
+    powerups: { ...GAME_CONFIG.powerups },
+    unlockedLevels: 0, // 0 means only level 0 is open
+    
+    // In-level state
+    levelQuestions: [],
+    currentQuestionIndex: 0,
+    correctInLevel: 0,
+    totalQuestionsAsked: 0,
+    totalCorrectAnswers: 0,
+    shieldActive: false
+};
+
+/**
+ * ============================================================================
+ * AUDIO SYSTEM (Web Audio API Synthesizer)
+ * ============================================================================
+ */
+const AudioSys = (function() {
+    let ctx = null;
+    let enabled = true;
+
+    function init() {
+        if (!ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            ctx = new AudioContext();
+        }
+        if (ctx.state === 'suspended') ctx.resume();
+    }
+
+    function playTone(freq, type = 'sine', duration = 0.1, vol = 0.1) {
+        if (!enabled || !ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, ctx.currentTime);
+        
+        gain.gain.setValueAtTime(vol, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + duration);
+    }
+
+    return {
+        init: init,
+        toggle: (val) => enabled = val,
+        playClick: () => playTone(600, 'sine', 0.05, 0.1),
+        playCorrect: () => {
+            playTone(523.25, 'sine', 0.1, 0.1); // C5
+            setTimeout(() => playTone(659.25, 'sine', 0.15, 0.1), 100); // E5
+            setTimeout(() => playTone(783.99, 'sine', 0.2, 0.1), 200); // G5
+        },
+        playWrong: () => {
+            playTone(200, 'sawtooth', 0.2, 0.1);
+            setTimeout(() => playTone(150, 'sawtooth', 0.3, 0.1), 150);
+        },
+        playMagic: () => {
+            for(let i=0; i<5; i++) {
+                setTimeout(() => playTone(800 + Math.random()*400, 'triangle', 0.1, 0.05), i*50);
+            }
+        },
+        playWinLevel: () => {
+            playTone(440, 'square', 0.1, 0.1);
+            setTimeout(() => playTone(554.37, 'square', 0.1, 0.1), 150);
+            setTimeout(() => playTone(659.25, 'square', 0.3, 0.1), 300);
+        },
+        playGameOver: () => {
+            playTone(300, 'sine', 0.4, 0.1);
+            setTimeout(() => playTone(250, 'sine', 0.4, 0.1), 300);
+            setTimeout(() => playTone(200, 'sine', 0.6, 0.1), 600);
+        }
+    };
+})();
+
+/**
+ * ============================================================================
+ * PARTICLE SYSTEM (Canvas API)
+ * ============================================================================
+ */
+const ParticleSys = (function() {
+    const canvas = document.getElementById('magic-particles');
+    const ctx = canvas.getContext('2d');
+    let particles = [];
+    let animationId;
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    class Particle {
+        constructor(x, y, color, type = 'float') {
+            this.x = x;
+            this.y = y;
+            this.color = color;
+            this.type = type; // float, burst, star
+            this.size = Math.random() * 3 + 1;
+            
+            if(type === 'burst') {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 5 + 2;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.03 + 0.015;
+            } else {
+                this.vx = (Math.random() - 0.5) * 1;
+                this.vy = Math.random() * -2 - 0.5;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.01 + 0.005;
+            }
+        }
+        update() {
+            this.x += this.vx;
+            this.y += this.vy;
+            if(this.type === 'burst') {
+                this.vy += 0.1; // gravity
+            }
+            this.life -= this.decay;
+        }
+        draw() {
+            ctx.globalAlpha = Math.max(0, this.life);
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            if(this.type === 'star') {
+                // simple square for now for performance, rotated
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.life * Math.PI);
+                ctx.fillRect(-this.size, -this.size, this.size*2, this.size*2);
+                ctx.restore();
+            } else {
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1.0;
+        }
+    }
+
+    function loop() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Ambient background particles
+        if (Math.random() < 0.1) {
+            particles.push(new Particle(Math.random() * canvas.width, canvas.height + 10, 'rgba(255,255,255,0.5)', 'float'));
+        }
+
+        for (let i = particles.length - 1; i >= 0; i--) {
+            particles[i].update();
+            particles[i].draw();
+            if (particles[i].life <= 0) {
+                particles.splice(i, 1);
+            }
+        }
+        animationId = requestAnimationFrame(loop);
+    }
+
+    return {
+        start: () => { if(!animationId) loop(); },
+        stop: () => { cancelAnimationFrame(animationId); animationId = null; },
+        burst: (x, y, color, count=30) => {
+            for(let i=0; i<count; i++) {
+                particles.push(new Particle(x, y, color, 'burst'));
+            }
+        },
+        createFeedbackText: (x, y, text, isCorrect) => {
+            const el = document.createElement('div');
+            el.className = `feedback-text ${isCorrect ? 'feedback-correct' : 'feedback-wrong'}`;
+            el.innerText = text;
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+            document.body.appendChild(el);
+            setTimeout(() => el.remove(), 1000);
+        }
+    };
+})();
+
+/**
+ * ============================================================================
+ * CORE GAME LOGIC
+ * ============================================================================
+ */
+
+// Helper to get random item from array
+const getRandom = (arr) => arr[Math.floor(Math.random() * arr.length)];
+// Helper to shuffle array
+const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
+
+function showScreen(screenId) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(screenId).classList.add('active');
+    AudioSys.playClick();
+}
+
+function showModal(title, message, callback) {
+    document.getElementById('modal-title').innerText = title;
+    document.getElementById('modal-message').innerText = message;
+    const modal = document.getElementById('custom-modal');
+    modal.classList.add('active');
+    
+    document.getElementById('modal-btn').onclick = () => {
+        closeModal();
+        if(callback) callback();
+    };
+}
+
+function closeModal() {
+    document.getElementById('custom-modal').classList.remove('active');
+    AudioSys.playClick();
+}
+
+// Update HUD elements
+function updateHUD() {
+    document.getElementById('hud-lives').innerText = state.lives;
+    document.getElementById('hud-score').innerText = state.score;
+    document.getElementById('hud-scrolls').innerText = state.scrolls;
+    
+    document.getElementById('game-lives').innerText = state.lives;
+    document.getElementById('game-score').innerText = state.score;
+    
+    document.getElementById('count-hint').innerText = state.powerups.hint;
+    document.getElementById('count-shield').innerText = state.powerups.shield;
+    
+    document.getElementById('btn-hint').classList.toggle('used', state.powerups.hint <= 0);
+    document.getElementById('btn-shield').classList.toggle('used', state.powerups.shield <= 0 || state.shieldActive);
+}
+
+function initGameData() {
+    state = {
+        lives: parseInt(document.getElementById('set-lives').value) || GAME_CONFIG.defaultLives,
+        score: 0,
+        scrolls: 0,
+        currentLevelIndex: 0,
+        powerups: { ...GAME_CONFIG.powerups },
+        unlockedLevels: 0,
+        totalQuestionsAsked: 0,
+        totalCorrectAnswers: 0,
+        shieldActive: false
+    };
+    buildMap();
+    updateHUD();
+}
+
+function saveSettings() {
+    GAME_CONFIG.defaultLives = parseInt(document.getElementById('set-lives').value);
+    GAME_CONFIG.questionsPerLevel = parseInt(document.getElementById('set-q-count').value);
+    showModal("สำเร็จ", "บันทึกการตั้งค่าแล้ว", () => showScreen('screen-menu'));
+}
+
+function startGame() {
+    AudioSys.init();
+    ParticleSys.start();
+    initGameData();
+    showScreen('screen-map');
+}
+
+/**
+ * MAP SYSTEM
+ */
+function buildMap() {
+    const container = document.getElementById('map-nodes-container');
+    container.innerHTML = '';
+    
+    KINGDOMS.forEach((kingdom, index) => {
+        const node = document.createElement('div');
+        node.id = `node-${index}`;
+        node.className = `level-node ${index <= state.unlockedLevels ? 'unlocked' : 'locked'}`;
+        
+        // If completed in previous session (though we reset now on start)
+        if (index < state.unlockedLevels) {
+            node.classList.remove('unlocked');
+            node.classList.add('completed');
+            node.innerHTML = '⭐';
+        } else {
+            node.innerHTML = kingdom.icon;
+        }
+
+        const label = document.createElement('div');
+        label.className = 'level-name';
+        label.innerText = kingdom.name;
+        node.appendChild(label);
+
+        node.onclick = () => {
+            if (index <= state.unlockedLevels) {
+                enterLevel(index);
+            } else {
+                AudioSys.playWrong();
+                node.classList.add('shake');
+                setTimeout(() => node.classList.remove('shake'), 400);
+            }
+        };
+        
+        container.appendChild(node);
+    });
+}
+
+/**
+ * LEVEL & QUESTION GENERATION
+ */
+function enterLevel(index) {
+    state.currentLevelIndex = index;
+    const kingdom = KINGDOMS[index];
+    
+    document.getElementById('current-kingdom-title').innerText = `อาณาจักร ${kingdom.name}`;
+    document.getElementById('current-kingdom-title').style.color = kingdom.color;
+    
+    // Generate Questions
+    state.levelQuestions = generateQuestionsForLevel(index);
+    state.currentQuestionIndex = 0;
+    state.correctInLevel = 0;
+    
+    showScreen('screen-game');
+    loadQuestion();
+    AudioSys.playMagic();
+}
+
+function generateQuestionsForLevel(index) {
+    const kingdom = KINGDOMS[index];
+    let questions = [];
+    const qCount = kingdom.isBoss ? GAME_CONFIG.bossQuestions : GAME_CONFIG.questionsPerLevel;
+    
+    for (let i = 0; i < qCount; i++) {
+        // Question Types: 
+        // 0: "คำใดอยู่ในมาตรา [Current]"
+        // 1: "[Word] อยู่ในมาตราใด"
+        // 2: Fill in the blank (harder, simulate by choosing final consonant)
+        
+        const qType = Math.random();
+        
+        if (kingdom.isBoss || qType < 0.4) {
+            // Type 1: Given a word, pick the kingdom
+            // Pick a random kingdom to test
+            const targetKingdomId = kingdom.isBoss ? getRandom(Object.keys(VOCAB)) : kingdom.id;
+            const targetWord = getRandom(VOCAB[targetKingdomId]);
+            const targetKingdomObj = KINGDOMS.find(k => k.id === targetKingdomId);
+            
+            // Get 3 wrong options (other kingdom names)
+            let wrongIds = Object.keys(VOCAB).filter(id => id !== targetKingdomId);
+            wrongIds = shuffle(wrongIds).slice(0, 3);
+            let options = wrongIds.map(id => ({ text: KINGDOMS.find(k=>k.id===id).name, isCorrect: false }));
+            options.push({ text: targetKingdomObj.name, isCorrect: true });
+            
+            questions.push({
+                text: `คำว่า <span class="word-highlight">"${targetWord}"</span> อยู่ในมาตราใด?`,
+                options: shuffle(options)
+            });
+
+        } else if (qType < 0.8) {
+            // Type 0: Pick the word that belongs to the current kingdom
+            const correctWord = getRandom(VOCAB[kingdom.id]);
+            
+            // Get 3 wrong words from other kingdoms
+            let wrongIds = Object.keys(VOCAB).filter(id => id !== kingdom.id);
+            wrongIds = shuffle(wrongIds).slice(0, 3);
+            let options = wrongIds.map(id => ({ text: getRandom(VOCAB[id]), isCorrect: false }));
+            options.push({ text: correctWord, isCorrect: true });
+            
+            questions.push({
+                text: `คำใดสะกดด้วย <span class="word-highlight">${kingdom.name}</span> ?`,
+                options: shuffle(options)
+            });
+        } else {
+             // Type 2: Missing final consonant
+             const correctWord = getRandom(VOCAB[kingdom.id]);
+             // Simple extraction logic (assuming word ends with the consonant we want to hide)
+             // This is tricky for Thai due to vowels, keep it simple: just show word with underscore at end if possible, or just fallback to Type 1
+             // For safety in one file without complex NLP, fallback to a variation of Type 0
+             let wrongIds = Object.keys(VOCAB).filter(id => id !== kingdom.id);
+             let wrongWord = getRandom(VOCAB[getRandom(wrongIds)]);
+             
+             let options = [
+                 { text: correctWord, isCorrect: true },
+                 { text: getRandom(VOCAB[getRandom(wrongIds)]), isCorrect: false },
+                 { text: getRandom(VOCAB[getRandom(wrongIds)]), isCorrect: false },
+                 { text: wrongWord, isCorrect: false }
+             ];
+             questions.push({
+                text: `ค้นหาคำศัพท์ที่ถูกต้องสำหรับ <span class="word-highlight">${kingdom.name}</span>`,
+                options: shuffle(options)
+            });
+        }
+    }
+    return questions;
+}
+
+function loadQuestion() {
+    updateHUD();
+    document.getElementById('game-q-current').innerText = state.currentQuestionIndex + 1;
+    document.getElementById('game-q-total').innerText = state.levelQuestions.length;
+    
+    const qData = state.levelQuestions[state.currentQuestionIndex];
+    document.getElementById('q-text').innerHTML = qData.text;
+    
+    const optionsContainer = document.getElementById('q-options');
+    optionsContainer.innerHTML = '';
+    
+    qData.options.forEach((opt, index) => {
+        const btn = document.createElement('button');
+        btn.className = 'option-btn';
+        btn.innerText = opt.text;
+        btn.onclick = (e) => checkAnswer(opt.isCorrect, btn, e);
+        optionsContainer.appendChild(btn);
+    });
+}
+
+function checkAnswer(isCorrect, btnElement, event) {
+    // Disable all buttons immediately
+    const allBtns = document.querySelectorAll('.option-btn');
+    allBtns.forEach(b => b.classList.add('disabled'));
+    
+    state.totalQuestionsAsked++;
+    const rect = btnElement.getBoundingClientRect();
+    const cx = rect.left + rect.width/2;
+    const cy = rect.top + rect.height/2;
+
+    if (isCorrect) {
+        btnElement.classList.add('correct');
+        AudioSys.playCorrect();
+        ParticleSys.burst(cx, cy, '#43e97b', 20);
+        ParticleSys.createFeedbackText(cx, cy, 'เยี่ยมมาก!', true);
+        
+        state.score += 10;
+        state.correctInLevel++;
+        state.totalCorrectAnswers++;
+        
+    } else {
+        btnElement.classList.add('wrong');
+        btnElement.classList.add('shake');
+        
+        // Show correct answer
+        allBtns.forEach(b => {
+            const opt = state.levelQuestions[state.currentQuestionIndex].options.find(o => o.text === b.innerText);
+            if(opt && opt.isCorrect) b.classList.add('correct');
+        });
+
+        AudioSys.playWrong();
+        ParticleSys.burst(cx, cy, '#ff6b6b', 10);
+        ParticleSys.createFeedbackText(cx, cy, 'ผิดพลาด!', false);
+
+        if (state.shieldActive) {
+            state.shieldActive = false;
+            showModal("โล่ป้องกันทำงาน!", "คุณไม่เสียหัวใจในครั้งนี้", nextQuestionSequence);
+            return; // Skip normal deduction
+        } else {
+            state.lives--;
+        }
+    }
+
+    updateHUD();
+
+    if (state.lives <= 0) {
+        setTimeout(gameOver, 1000);
+    } else {
+        setTimeout(nextQuestionSequence, 1500);
+    }
+}
+
+function nextQuestionSequence() {
+    state.currentQuestionIndex++;
+    if (state.currentQuestionIndex < state.levelQuestions.length) {
+        // Simple transition animation
+        const card = document.getElementById('question-area');
+        card.style.opacity = 0;
+        setTimeout(() => {
+            loadQuestion();
+            card.style.opacity = 1;
+        }, 300);
+    } else {
+        levelComplete();
+    }
+}
+
+function levelComplete() {
+    AudioSys.playWinLevel();
+    
+    // Calculate stars for this level
+    let accuracy = state.correctInLevel / state.levelQuestions.length;
+    let starsEarned = accuracy === 1 ? 3 : (accuracy >= 0.6 ? 2 : 1);
+    
+    // Add scroll
+    state.scrolls++;
+    
+    // Unlock next
+    if (state.currentLevelIndex === state.unlockedLevels) {
+        state.unlockedLevels++;
+    }
+
+    let msg = `คุณตอบถูก ${state.correctInLevel}/${state.levelQuestions.length} ข้อ\nได้รับ ${starsEarned} ดาว ⭐`;
+    if(KINGDOMS[state.currentLevelIndex].isBoss) {
+        msg = "คุณกอบกู้หอสมุดเวทมนตร์สำเร็จ!\nภาษาไทยกลับมาสมบูรณ์อีกครั้ง!";
+    }
+
+    showModal(`เคลียร์ด่าน ${KINGDOMS[state.currentLevelIndex].name}!`, msg, () => {
+        if(KINGDOMS[state.currentLevelIndex].isBoss) {
+            showResult();
+        } else {
+            buildMap();
+            showScreen('screen-map');
+        }
+    });
+}
+
+function gameOver() {
+    AudioSys.playGameOver();
+    showModal("จบเกม!", "พลังชีวิตของคุณหมดแล้ว\nกลับไปฝึกฝนแล้วมาใหม่นะ", () => {
+        showResult();
+    });
+}
+
+function showResult() {
+    showScreen('screen-result');
+    ParticleSys.burst(window.innerWidth/2, window.innerHeight/2, '#f6d365', 100);
+    
+    document.getElementById('res-score').innerText = state.score;
+    document.getElementById('res-scrolls').innerText = state.scrolls;
+    
+    const accuracy = state.totalQuestionsAsked > 0 ? Math.round((state.totalCorrectAnswers / state.totalQuestionsAsked) * 100) : 0;
+    document.getElementById('res-accuracy').innerText = accuracy;
+    
+    let rank = "ผู้เริ่มต้น";
+    if(state.scrolls >= 8 && accuracy >= 80) rank = "นักปราชญ์ภาษาไทย (Legendary)";
+    else if(state.scrolls >= 6) rank = "ทอง (Gold)";
+    else if(state.scrolls >= 4) rank = "เงิน (Silver)";
+    else if(state.scrolls >= 2) rank = "ทองแดง (Bronze)";
+    
+    document.getElementById('res-rank').innerText = rank;
+    
+    // Simple prompt for name
+    const playerName = prompt("กรุณาใส่ชื่อของคุณสำหรับประกาศนียบัตร:", "ผู้เล่นคนเก่ง") || "ผู้เล่นนิรนาม";
+    document.getElementById('cert-player-name').innerText = playerName;
+    
+    // Save to local variable for leaderboard saving
+    state.finalName = playerName;
+}
+
+/**
+ * POWER-UPS
+ */
+function usePowerup(type) {
+    if (state.powerups[type] <= 0) return;
+    
+    if (type === 'hint') {
+        // Disable 2 wrong answers
+        const btns = Array.from(document.querySelectorAll('.option-btn:not(.disabled)'));
+        const wrongBtns = btns.filter(b => {
+            const opt = state.levelQuestions[state.currentQuestionIndex].options.find(o => o.text === b.innerText);
+            return opt && !opt.isCorrect;
+        });
+        
+        // Remove up to 2 wrong options
+        for(let i=0; i<Math.min(2, wrongBtns.length); i++) {
+            wrongBtns[i].classList.add('disabled');
+            wrongBtns[i].style.opacity = '0.2';
+        }
+        
+        state.powerups.hint--;
+        AudioSys.playMagic();
+        ParticleSys.burst(window.innerWidth/2, window.innerHeight/2, '#00ffff', 30);
+    } 
+    else if (type === 'shield') {
+        if(state.shieldActive) return;
+        state.shieldActive = true;
+        state.powerups.shield--;
+        AudioSys.playMagic();
+        document.getElementById('btn-shield').style.boxShadow = "0 0 20px #4facfe";
+    }
+    
+    updateHUD();
+}
+
+/**
+ * LEADERBOARD (LocalStorage)
+ */
+function saveToLeaderboard() {
+    let lb = JSON.parse(localStorage.getItem('thaiEscapeLB') || '[]');
+    lb.push({
+        name: state.finalName || "Unknown",
+        score: state.score,
+        date: new Date().toLocaleDateString('th-TH')
+    });
+    // Sort descending
+    lb.sort((a,b) => b.score - a.score);
+    lb = lb.slice(0, 10); // Keep top 10
+    localStorage.setItem('thaiEscapeLB', JSON.stringify(lb));
+    
+    renderLeaderboard();
+    showScreen('screen-leaderboard');
+}
+
+function renderLeaderboard() {
+    const lb = JSON.parse(localStorage.getItem('thaiEscapeLB') || '[]');
+    const container = document.getElementById('leaderboard-list');
+    container.innerHTML = '';
+    
+    if(lb.length === 0) {
+        container.innerHTML = '<p class="text-center">ยังไม่มีสถิติ</p>';
+        return;
+    }
+    
+    lb.forEach((entry, i) => {
+        const el = document.createElement('div');
+        el.style.padding = "10px";
+        el.style.borderBottom = "1px solid rgba(255,255,255,0.2)";
+        el.style.display = "flex";
+        el.style.justifyContent = "space-between";
+        
+        let medal = "";
+        if(i===0) medal = "🥇";
+        else if(i===1) medal = "🥈";
+        else if(i===2) medal = "🥉";
+        else medal = `${i+1}.`;
+        
+        el.innerHTML = `<span>${medal} ${entry.name}</span> <span>⭐ ${entry.score} <small>(${entry.date})</small></span>`;
+        container.appendChild(el);
+    });
+}
+
+// Initial Setup
+renderLeaderboard();
+
+</script>
+</body>
+</html>
