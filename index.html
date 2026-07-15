@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Escape Room : ตามหามาตราตัวสะกด</title>
+    
+    <!-- MediaPipe for AR Hand Tracking -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
     <style>
         /* =========================================
            CSS VARIABLES & RESET
@@ -551,9 +556,62 @@
         .feedback-correct { color: #43e97b; animation: floatUpFade 1s forwards; }
         .feedback-wrong { color: #ff6b6b; animation: floatUpFade 1s forwards; }
 
+        /* =========================================
+           AR STYLES
+        ========================================= */
+        .ar-video-container {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            width: 150px;
+            border-radius: 15px;
+            overflow: hidden;
+            border: 3px solid var(--accent);
+            box-shadow: 0 0 20px rgba(0,255,255,0.3);
+            z-index: 1000;
+            display: none;
+            transform: scaleX(-1); /* Mirror camera */
+        }
+        .ar-video-container video { width: 100%; display: block; }
+        
+        .ar-cursor {
+            position: fixed;
+            width: 40px;
+            height: 40px;
+            background: radial-gradient(circle, rgba(0,255,255,0.8) 0%, rgba(0,255,255,0) 70%);
+            border: 2px solid #00ffff;
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+            transform: translate(-50%, -50%);
+            transition: transform 0.1s;
+            box-shadow: 0 0 15px #00ffff;
+        }
+        .ar-cursor.fist {
+            background: radial-gradient(circle, rgba(255,20,147,0.8) 0%, rgba(255,20,147,0) 70%);
+            border-color: #ff1493;
+            box-shadow: 0 0 25px #ff1493;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+        
+        /* Simulate hover state for AR */
+        .ar-hover {
+            transform: scale(1.05) !important;
+            box-shadow: 0 0 20px #00ffff !important;
+            border-color: #00ffff !important;
+            filter: brightness(1.2);
+        }
+
     </style>
 </head>
 <body>
+
+<!-- AR Elements -->
+<div class="ar-video-container" id="ar-camera-view">
+    <video id="ar-video" autoplay playsinline></video>
+</div>
+<div class="ar-cursor" id="ar-cursor"></div>
 
 <div id="game-container">
     <!-- Background Canvas for Particles/Magic -->
@@ -569,6 +627,7 @@
             <button class="btn btn-green" onclick="startGame()">▶ เริ่มผจญภัย</button>
             <button class="btn" onclick="showScreen('screen-teacher')">⚙️ โหมดครูผู้สอน</button>
             <button class="btn btn-gold" onclick="showScreen('screen-leaderboard')">🏆 หอเกียรติยศ</button>
+            <button class="btn" id="btn-toggle-ar" onclick="toggleAR()" style="background: linear-gradient(45deg, #00c6ff, #0072ff);">🖐️ เปิดโหมด AR (กำมือเลือก)</button>
         </div>
     </div>
 
@@ -751,6 +810,19 @@ let state = {
     combo: 0,
     timerInterval: null,
     timeLeft: 0
+};
+
+// AR State
+let arState = {
+    active: false,
+    camera: null,
+    handsModel: null,
+    cursorX: window.innerWidth / 2,
+    cursorY: window.innerHeight / 2,
+    targetX: window.innerWidth / 2,
+    targetY: window.innerHeight / 2,
+    isFist: false,
+    lastFistTime: 0
 };
 
 /**
@@ -1451,6 +1523,179 @@ function renderLeaderboard() {
         el.innerHTML = `<span>${medal} ${entry.name}</span> <span>⭐ ${entry.score} <small>(${entry.date})</small></span>`;
         container.appendChild(el);
     });
+}
+
+/**
+ * ============================================================================
+ * AR HAND TRACKING SYSTEM (MediaPipe)
+ * ============================================================================
+ */
+async function toggleAR() {
+    const btn = document.getElementById('btn-toggle-ar');
+    
+    // หากเปิดอยู่ให้ทำการปิด
+    if (arState.active) {
+        arState.active = false;
+        if (arState.camera) {
+            arState.camera.stop();
+        }
+        document.getElementById('ar-camera-view').style.display = 'none';
+        document.getElementById('ar-cursor').style.display = 'none';
+        btn.innerHTML = '🖐️ เปิดโหมด AR (กำมือเลือก)';
+        btn.style.background = 'linear-gradient(45deg, #00c6ff, #0072ff)';
+        return;
+    }
+
+    // ทำการเปิด AR
+    btn.innerHTML = 'กำลังโหลดเวทมนตร์ AR... ⏳';
+    
+    try {
+        if (!arState.handsModel) {
+            arState.handsModel = new Hands({locateFile: (file) => {
+                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+            
+            arState.handsModel.setOptions({
+                maxNumHands: 1,
+                modelComplexity: 1,
+                minDetectionConfidence: 0.7,
+                minTrackingConfidence: 0.7
+            });
+            
+            arState.handsModel.onResults(onARResults);
+        }
+
+        const videoElement = document.getElementById('ar-video');
+        if (!arState.camera) {
+            arState.camera = new Camera(videoElement, {
+                onFrame: async () => {
+                    await arState.handsModel.send({image: videoElement});
+                },
+                width: 320,
+                height: 240
+            });
+        }
+
+        await arState.camera.start();
+        arState.active = true;
+        document.getElementById('ar-camera-view').style.display = 'block';
+        document.getElementById('ar-cursor').style.display = 'block';
+        btn.innerHTML = '🖐️ ปิดโหมด AR';
+        btn.style.background = 'linear-gradient(45deg, #ff6b6b, #ff0844)';
+        
+        // เริ่มลูปคำนวณการเคลื่อนที่เคอร์เซอร์
+        requestAnimationFrame(updateARCursor);
+        
+    } catch (error) {
+        console.error("AR Init Error:", error);
+        showModal("ข้อผิดพลาด AR", "ไม่สามารถเปิดกล้องได้ กรุณาอนุญาตการเข้าถึงกล้อง");
+        btn.innerHTML = '🖐️ เปิดโหมด AR (กำมือเลือก)';
+    }
+}
+
+function onARResults(results) {
+    if (!arState.active) return;
+
+    const cursorEl = document.getElementById('ar-cursor');
+    
+    // หากตรวจพบมือ
+    if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+        const landmarks = results.multiHandLandmarks[0];
+        
+        // ใช้ตำแหน่งของข้อต่อโคนนิ้วกลาง (Landmark 9) ในการคุมเคอร์เซอร์
+        // สลับแกน X (1 - x) เพื่อให้รู้สึกเหมือนกระจกเงา
+        arState.targetX = (1 - landmarks[9].x) * window.innerWidth;
+        arState.targetY = landmarks[9].y * window.innerHeight;
+        
+        // ตรวจสอบลักษณะมือว่า "กำมือ" หรือไม่
+        const isFistNow = detectFist(landmarks);
+        
+        if (isFistNow && !arState.isFist) {
+            // การกระทำเมื่อเริ่มกำมือ (Trigger Click)
+            const now = Date.now();
+            if (now - arState.lastFistTime > 700) { // หน่วงเวลา 0.7 วิป้องกันการกดเบิ้ล
+                triggerARClick(arState.cursorX, arState.cursorY);
+                arState.lastFistTime = now;
+            }
+        }
+        
+        arState.isFist = isFistNow;
+        
+        // เปลี่ยนหน้าตาเคอร์เซอร์เมื่อกำมือ
+        if(arState.isFist) {
+            cursorEl.classList.add('fist');
+        } else {
+            cursorEl.classList.remove('fist');
+        }
+        
+        cursorEl.style.opacity = '1';
+    } else {
+        // หากไม่พบมือ ให้ซ่อนเคอร์เซอร์และลบแสงเรืองรองที่ปุ่ม
+        cursorEl.style.opacity = '0';
+        document.querySelectorAll('.ar-hover').forEach(el => el.classList.remove('ar-hover'));
+    }
+}
+
+function detectFist(landmarks) {
+    // ปลายนิ้ว: 8, 12, 16, 20  ข้อต่อกลาง: 6, 10, 14, 18  ข้อมือ: 0
+    let fistScore = 0;
+    const fingers = [
+        {tip: 8, pip: 6},
+        {tip: 12, pip: 10},
+        {tip: 16, pip: 14},
+        {tip: 20, pip: 18}
+    ];
+    
+    for (let f of fingers) {
+        // หาความห่างของปลายนิ้วกับข้อมือ เทียบกับความห่างของข้อต่อกลางกับข้อมือ
+        const distTip = Math.hypot(landmarks[f.tip].x - landmarks[0].x, landmarks[f.tip].y - landmarks[0].y);
+        const distPip = Math.hypot(landmarks[f.pip].x - landmarks[0].x, landmarks[f.pip].y - landmarks[0].y);
+        
+        // ถ้าระยะปลายนิ้วใกล้ข้อมือมากกว่าข้อต่อ แปลว่างอนิ้วลงมา (กำมือ)
+        if (distTip < distPip + 0.03) { 
+            fistScore++;
+        }
+    }
+    
+    // ถ้างอนิ้วอย่างน้อย 3 นิ้ว ให้ถือว่ากำมือ
+    return fistScore >= 3;
+}
+
+function updateARCursor() {
+    if (!arState.active) return;
+    
+    // ค่อยๆ ให้เคอร์เซอร์เลื่อนตามมือ (Linear Interpolation) เพื่อความสมูท
+    arState.cursorX += (arState.targetX - arState.cursorX) * 0.3;
+    arState.cursorY += (arState.targetY - arState.cursorY) * 0.3;
+    
+    const cursorEl = document.getElementById('ar-cursor');
+    cursorEl.style.left = arState.cursorX + 'px';
+    cursorEl.style.top = arState.cursorY + 'px';
+    
+    // จัดการระบบ Hover สไตล์ AR (แสงเรืองรองเวลาชี้ปุ่ม)
+    const elUnder = document.elementFromPoint(arState.cursorX, arState.cursorY);
+    
+    document.querySelectorAll('.ar-hover').forEach(el => el.classList.remove('ar-hover'));
+    if (elUnder) {
+        const interactable = elUnder.closest('.option-btn, .btn, .level-node, .powerup-btn');
+        if (interactable && !interactable.classList.contains('disabled') && !interactable.classList.contains('locked')) {
+            interactable.classList.add('ar-hover');
+        }
+    }
+    
+    requestAnimationFrame(updateARCursor);
+}
+
+function triggerARClick(x, y) {
+    const elUnder = document.elementFromPoint(x, y);
+    if (elUnder) {
+        const interactable = elUnder.closest('.option-btn, .btn, .level-node, .powerup-btn');
+        if (interactable && !interactable.classList.contains('disabled') && !interactable.classList.contains('locked')) {
+            AudioSys.playClick();
+            ParticleSys.burst(x, y, '#ff1493', 20); // เอฟเฟกต์สีชมพูกระจายเวลาคลิก
+            interactable.click();
+        }
+    }
 }
 
 // Initial Setup
