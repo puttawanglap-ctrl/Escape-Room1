@@ -423,6 +423,44 @@
             font-weight: bold;
         }
 
+        .timer-container {
+            width: 100%;
+            height: 10px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+            margin-bottom: 20px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        
+        .timer-bar {
+            height: 100%;
+            width: 100%;
+            background: linear-gradient(90deg, #00ff87, #60efff);
+            transition: width 0.1s linear, background-color 0.3s;
+        }
+        
+        .timer-bar.warning { background: linear-gradient(90deg, #f6d365, #fda085); }
+        .timer-bar.danger { background: linear-gradient(90deg, #ff0844, #ffb199); }
+        
+        .explanation-box {
+            margin-top: 20px;
+            padding: 15px;
+            background: rgba(0,0,0,0.7);
+            border-left: 5px solid #ff6b6b;
+            border-radius: 10px;
+            font-size: 1.2rem;
+            color: #fff;
+            display: none;
+            animation: popIn 0.3s ease;
+        }
+        
+        .combo-text {
+            color: #f6d365;
+            font-weight: bold;
+            animation: pulseGlow 1s infinite;
+        }
+
         /* Result Screen */
         .certificate {
             background: #fff;
@@ -576,6 +614,7 @@
             <div class="stats-group" style="background: rgba(0,0,0,0.4); padding: 5px 15px; border-radius: 20px;">
                 <div class="stat-item">❤️ <span id="game-lives">3</span></div>
                 <div class="stat-item">⭐ <span id="game-score">0</span></div>
+                <div class="stat-item combo-text hidden" id="game-combo">🔥 Combo x<span id="game-combo-val">1</span></div>
             </div>
             <div class="kingdom-title" id="current-kingdom-title">อาณาจักร แม่ กก</div>
             <div style="font-weight: bold; background: rgba(0,0,0,0.4); padding: 5px 15px; border-radius: 20px;">
@@ -586,9 +625,14 @@
         <div class="question-card" id="question-area">
             <!-- Question content injected here -->
             <div class="question-text" id="q-text">กำลังโหลดเวทมนตร์...</div>
+            
+            <div class="timer-container"><div class="timer-bar" id="q-timer-bar"></div></div>
+            
             <div class="options-grid" id="q-options">
                 <!-- Options injected here -->
             </div>
+            
+            <div class="explanation-box" id="q-explanation"></div>
         </div>
 
         <div class="powerup-bar">
@@ -655,7 +699,8 @@ const GAME_CONFIG = {
     defaultLives: 3,
     questionsPerLevel: 5,
     bossQuestions: 15,
-    powerups: { hint: 3, shield: 1 }
+    powerups: { hint: 3, shield: 1 },
+    timePerQuestion: 15 // วินาทีต่อ 1 คำถาม
 };
 
 const KINGDOMS = [
@@ -701,7 +746,11 @@ let state = {
     correctInLevel: 0,
     totalQuestionsAsked: 0,
     totalCorrectAnswers: 0,
-    shieldActive: false
+    shieldActive: false,
+    
+    combo: 0,
+    timerInterval: null,
+    timeLeft: 0
 };
 
 /**
@@ -916,6 +965,14 @@ function updateHUD() {
     document.getElementById('game-lives').innerText = state.lives;
     document.getElementById('game-score').innerText = state.score;
     
+    const comboEl = document.getElementById('game-combo');
+    if(state.combo > 1) {
+        comboEl.classList.remove('hidden');
+        document.getElementById('game-combo-val').innerText = state.combo;
+    } else {
+        comboEl.classList.add('hidden');
+    }
+    
     document.getElementById('count-hint').innerText = state.powerups.hint;
     document.getElementById('count-shield').innerText = state.powerups.shield;
     
@@ -1089,6 +1146,10 @@ function loadQuestion() {
     const qData = state.levelQuestions[state.currentQuestionIndex];
     document.getElementById('q-text').innerHTML = qData.text;
     
+    document.getElementById('q-explanation').style.display = 'none';
+    document.getElementById('q-timer-bar').style.width = '100%';
+    document.getElementById('q-timer-bar').className = 'timer-bar';
+    
     const optionsContainer = document.getElementById('q-options');
     optionsContainer.innerHTML = '';
     
@@ -1099,9 +1160,71 @@ function loadQuestion() {
         btn.onclick = (e) => checkAnswer(opt.isCorrect, btn, e);
         optionsContainer.appendChild(btn);
     });
+    
+    startTimer();
+}
+
+function startTimer() {
+    clearInterval(state.timerInterval);
+    state.timeLeft = GAME_CONFIG.timePerQuestion;
+    const timerBar = document.getElementById('q-timer-bar');
+    
+    state.timerInterval = setInterval(() => {
+        state.timeLeft -= 0.1;
+        const percent = (state.timeLeft / GAME_CONFIG.timePerQuestion) * 100;
+        timerBar.style.width = `${percent}%`;
+        
+        // Change color based on time left
+        if (percent < 50 && percent >= 20) timerBar.className = 'timer-bar warning';
+        else if (percent < 20) timerBar.className = 'timer-bar danger';
+        
+        if (state.timeLeft <= 0) {
+            clearInterval(state.timerInterval);
+            handleTimeOut();
+        }
+    }, 100);
+}
+
+function handleTimeOut() {
+    const allBtns = document.querySelectorAll('.option-btn');
+    allBtns.forEach(b => b.classList.add('disabled'));
+    AudioSys.playWrong();
+    state.combo = 0; // Reset combo
+    
+    let correctText = "";
+    allBtns.forEach(b => {
+        const opt = state.levelQuestions[state.currentQuestionIndex].options.find(o => o.text === b.innerText);
+        if(opt && opt.isCorrect) {
+            b.classList.add('correct');
+            correctText = opt.text;
+        }
+    });
+    
+    showExplanation(`⏰ หมดเวลา! คำที่ถูกต้องคือ <b>"${correctText}"</b>`);
+    
+    if (state.shieldActive) {
+        state.shieldActive = false;
+        updateHUD();
+        setTimeout(() => {
+            showModal("โล่ป้องกันทำงาน!", "หมดเวลาแต่คุณไม่เสียหัวใจในครั้งนี้", nextQuestionSequence);
+        }, 1000);
+    } else {
+        state.lives--;
+        updateHUD();
+        if (state.lives <= 0) setTimeout(gameOver, 2500);
+        else setTimeout(nextQuestionSequence, 2500);
+    }
+}
+
+function showExplanation(text) {
+    const expBox = document.getElementById('q-explanation');
+    expBox.innerHTML = text;
+    expBox.style.display = 'block';
 }
 
 function checkAnswer(isCorrect, btnElement, event) {
+    clearInterval(state.timerInterval); // Stop the timer
+    
     // Disable all buttons immediately
     const allBtns = document.querySelectorAll('.option-btn');
     allBtns.forEach(b => b.classList.add('disabled'));
@@ -1115,41 +1238,58 @@ function checkAnswer(isCorrect, btnElement, event) {
         btnElement.classList.add('correct');
         AudioSys.playCorrect();
         ParticleSys.burst(cx, cy, '#43e97b', 20);
-        ParticleSys.createFeedbackText(cx, cy, 'เยี่ยมมาก!', true);
         
-        state.score += 10;
+        // Combo Logic
+        state.combo++;
+        let pointsEarned = 10 * (state.combo > 1 ? state.combo : 1);
+        
+        ParticleSys.createFeedbackText(cx, cy, state.combo > 1 ? `Combo x${state.combo} (+${pointsEarned})` : 'เยี่ยมมาก!', true);
+        
+        state.score += pointsEarned;
         state.correctInLevel++;
         state.totalCorrectAnswers++;
+        
+        updateHUD();
+        setTimeout(nextQuestionSequence, 1500);
         
     } else {
         btnElement.classList.add('wrong');
         btnElement.classList.add('shake');
+        state.combo = 0; // Reset combo on wrong answer
         
+        let correctText = "";
         // Show correct answer
         allBtns.forEach(b => {
             const opt = state.levelQuestions[state.currentQuestionIndex].options.find(o => o.text === b.innerText);
-            if(opt && opt.isCorrect) b.classList.add('correct');
+            if(opt && opt.isCorrect) {
+                b.classList.add('correct');
+                correctText = opt.text;
+            }
         });
 
         AudioSys.playWrong();
         ParticleSys.burst(cx, cy, '#ff6b6b', 10);
         ParticleSys.createFeedbackText(cx, cy, 'ผิดพลาด!', false);
+        
+        // Show educational explanation
+        showExplanation(`คำตอบที่ถูกต้องคือ <b>"${correctText}"</b><br><small>พยายามจำรูปแบบนี้ไว้ใช้นะ!</small>`);
 
         if (state.shieldActive) {
             state.shieldActive = false;
-            showModal("โล่ป้องกันทำงาน!", "คุณไม่เสียหัวใจในครั้งนี้", nextQuestionSequence);
+            updateHUD();
+            setTimeout(() => {
+                showModal("โล่ป้องกันทำงาน!", "คุณไม่เสียหัวใจในครั้งนี้", nextQuestionSequence);
+            }, 1000);
             return; // Skip normal deduction
         } else {
             state.lives--;
+            updateHUD();
+            if (state.lives <= 0) {
+                setTimeout(gameOver, 2500);
+            } else {
+                setTimeout(nextQuestionSequence, 2500);
+            }
         }
-    }
-
-    updateHUD();
-
-    if (state.lives <= 0) {
-        setTimeout(gameOver, 1000);
-    } else {
-        setTimeout(nextQuestionSequence, 1500);
     }
 }
 
